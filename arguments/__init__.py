@@ -51,9 +51,23 @@ class ModelParams(ParamGroup):
         self._model_path = ""
         self._images = "images"
         self._resolution = -1
-        self._white_background = False
+        self.bg_color = 0.
         self.data_device = "cuda"
         self.eval = False
+        self.event_threshold = 0.25
+        self.tonemap_eps = 0.01
+        self.pose_learnable = False # Do not change this directly. It gets overridden later, if pose_lr > 0. Stays false otherwise.
+        self.precondition = False
+        self.max_events = 1_000_000
+        self.pose_folder = "pose"
+
+        # Params for ablation.
+        self.lambda_isotropic_reg = 1.0
+        self.lambda_pose_reg = 0.001
+        self.adaptive_event_window = 1
+        self.n_event_losses = 2  # Choice from [1, 2]
+        self.lambda_color_range = 1   # Choice from [0, 1]
+        
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -70,22 +84,27 @@ class PipelineParams(ParamGroup):
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
-        self.iterations = 30_000
+        self.iterations = 60_000
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
-        self.position_lr_max_steps = 30_000
+        self.position_lr_max_steps = 60_000
         self.feature_lr = 0.0025
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
+        self.pose_lr = -1.0
         self.percent_dense = 0.01
-        self.lambda_dssim = 0.2
-        self.densification_interval = 100
+        self.lambda_dssim = 0.
+        self.densification_interval = 500
         self.opacity_reset_interval = 3000
+        self.opacity_reset_until = 30_000
         self.densify_from_iter = 500
-        self.densify_until_iter = 15_000
+        self.densify_until_iter = 50_000
         self.densify_grad_threshold = 0.0002
+        self.densify_grad_threshold_final = 0.00004
+        self.event_schedule_end = 40_000
+
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

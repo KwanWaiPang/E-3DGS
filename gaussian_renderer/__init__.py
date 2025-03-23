@@ -14,6 +14,7 @@ import math
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
+from pytorch3d.transforms import matrix_to_quaternion
 
 def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None):
     """
@@ -40,8 +41,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         tanfovy=tanfovy,
         bg=bg_color,
         scale_modifier=scaling_modifier,
-        viewmatrix=viewpoint_camera.world_view_transform,
-        projmatrix=viewpoint_camera.full_proj_transform,
         sh_degree=pc.active_sh_degree,
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
@@ -71,6 +70,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     colors_precomp = None
     if override_color is None:
         if pipe.convert_SHs_python:
+            assert False
             shs_view = pc.get_features.transpose(1, 2).view(-1, 3, (pc.max_sh_degree+1)**2)
             dir_pp = (pc.get_xyz - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1))
             dir_pp_normalized = dir_pp/dir_pp.norm(dim=1, keepdim=True)
@@ -81,10 +81,41 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     else:
         colors_precomp = override_color
 
+    #######################################################
+    # breakpoint()
+    cam_learnable = viewpoint_camera.cam_mgr.learnable
+
+    if cam_learnable:
+        w2c = viewpoint_camera.world_view_transform
+        cam_quat = matrix_to_quaternion(w2c[:3, :3].unsqueeze(0))
+
+        pts_ones = torch.ones(means3D.shape[0], 1).cuda().float()
+        pts4 = torch.cat((means3D, pts_ones), dim=1)
+        transformed_pts = pts4 @ w2c
+        transformed_pts = transformed_pts[:, :3] / transformed_pts[:, 3:4]
+
+        def quat_mult(q1, q2):
+            w1, x1, y1, z1 = q1.T
+            w2, x2, y2, z2 = q2.T
+            w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+            x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+            y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+            z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+            return torch.stack([w, x, y, z]).T
+        
+        rotations = quat_mult(cam_quat, rotations)
+        rotations = rotations / torch.norm(rotations, dim=1).unsqueeze(-1)
+    # print(rotations.shape, norms.shape)
+    # assert torch.allclose(norms, torch.ones_like(norms))
+
+    #######################################################
+
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     rendered_image, radii = rasterizer(
-        means3D = means3D,
+        means3D = transformed_pts if cam_learnable else means3D,
         means2D = means2D,
+        viewmatrix=torch.eye(4).cuda() if cam_learnable else viewpoint_camera.world_view_transform,
+        projmatrix=viewpoint_camera.projection_matrix if cam_learnable else viewpoint_camera.full_proj_transform,
         shs = shs,
         colors_precomp = colors_precomp,
         opacities = opacity,

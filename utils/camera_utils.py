@@ -16,53 +16,72 @@ from utils.graphics_utils import fov2focal
 
 WARNED = False
 
-def loadCam(args, id, cam_info, resolution_scale):
-    orig_w, orig_h = cam_info.image.size
+def loadCam(args, id, cam_info, resolution_scale, cam_mgr):
+    # orig_w, orig_h = cam_info.image.width, cam_info.image.height
 
-    if args.resolution in [1, 2, 4, 8]:
-        resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
-    else:  # should be a type that converts to float
-        if args.resolution == -1:
-            if orig_w > 1600:
-                global WARNED
-                if not WARNED:
-                    print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
-                        "If this is not desired, please explicitly specify '--resolution/-r' as 1")
-                    WARNED = True
-                global_down = orig_w / 1600
-            else:
-                global_down = 1
-        else:
-            global_down = orig_w / args.resolution
+    # if args.resolution in [1, 2, 4, 8]:
+    #     resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
+    # else:  # should be a type that converts to float
+    #     if args.resolution == -1:
+    #         if orig_w > 1600:
+    #             global WARNED
+    #             if not WARNED:
+    #                 print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
+    #                     "If this is not desired, please explicitly specify '--resolution/-r' as 1")
+    #                 WARNED = True
+    #             global_down = orig_w / 1600
+    #         else:
+    #             global_down = 1
+    #     else:
+    #         global_down = orig_w / args.resolution
 
-        scale = float(global_down) * float(resolution_scale)
-        resolution = (int(orig_w / scale), int(orig_h / scale))
+    #     scale = float(global_down) * float(resolution_scale)
+    #     resolution = (int(orig_w / scale), int(orig_h / scale))
 
-    resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+    if cam_info.image is not None:
+        resized_image_rgb = PILtoTorch(cam_info.image, None) / 255
+        gt_image = resized_image_rgb[:3, ...]
+        loaded_mask = None
 
-    gt_image = resized_image_rgb[:3, ...]
-    loaded_mask = None
+        if resized_image_rgb.shape[1] == 4:
+            loaded_mask = resized_image_rgb[3:4, ...]
+    else:
+        gt_image = None
+        loaded_mask = None
 
-    if resized_image_rgb.shape[1] == 4:
-        loaded_mask = resized_image_rgb[3:4, ...]
+    cams = []
 
-    return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
+    for i in range(len(cam_info.image_names)):
+        cams.append(
+            Camera(colmap_id=cam_info.uid,
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
-                  image=gt_image, gt_alpha_mask=loaded_mask,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device)
+                  image=gt_image if i == 0 else None, 
+                  gt_alpha_mask=loaded_mask,
+                  event_mgr=cam_info.event_mgr,
+                  image_name=cam_info.image_names[i],
+                  ref_image_name=cam_info.image_names[0], uid=id, data_device=args.data_device, cam_mgr=cam_mgr,
+                  W=cam_info.width,
+                  H=cam_info.height)
+        )
 
-def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+    return cams
+
+def cameraList_from_camInfos(cam_infos, resolution_scale, args, cam_mgr):
     camera_list = []
 
     for id, c in enumerate(cam_infos):
-        camera_list.append(loadCam(args, id, c, resolution_scale))
+        camera_list.append(loadCam(args, id, c, resolution_scale, cam_mgr))
+
+    if cam_mgr.precondition:
+        # Assumes, all cameras have the same projection matrix
+        cam_mgr.compute_preconditioner(camera_list[0][0].projection_matrix)
 
     return camera_list
 
 def camera_to_JSON(id, camera : Camera):
     Rt = np.zeros((4, 4))
-    Rt[:3, :3] = camera.R.transpose()
-    Rt[:3, 3] = camera.T
+    Rt[:3, :3] = camera.Rs[0].transpose()
+    Rt[:3, 3] = camera.Ts[0]
     Rt[3, 3] = 1.0
 
     W2C = np.linalg.inv(Rt)
@@ -71,7 +90,7 @@ def camera_to_JSON(id, camera : Camera):
     serializable_array_2d = [x.tolist() for x in rot]
     camera_entry = {
         'id' : id,
-        'img_name' : camera.image_name,
+        'img_name' : camera.image_names[0],
         'width' : camera.width,
         'height' : camera.height,
         'position': pos.tolist(),
