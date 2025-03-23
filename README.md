@@ -49,9 +49,4 @@ The rendered images can then be found in the model output directory.
 
 # Full list of experiments for the paper
 
-The script used to run the entire list of experiments listed in the paper can be found with the name of `run_experiment.sh`. The script is unrefined and can have some glitches, however it can be used for general understanding of the experimentation setting.
-
-# Warning:
-
-There are some remnant code snippets in the dataloader which in some cases can possibly cause unexpected behavior depending on the paths used. These have been marked by `WARNING` labels in the comment in the `scene/dataset_readers.py` file.
-However, all of these are only possible issues for training on TUM-VIE and EventNeRF datasets and should not cause any problems for the sample dataset.
+The script used to run the entire list of experiments listed in the paper can be found with the name of `run_experiment.sh`. It can also be used for general understanding of the experimentation setting.
