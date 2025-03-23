@@ -50,3 +50,16 @@ The rendered images can then be found in the model output directory.
 # Full list of experiments for the paper
 
 The script used to run the entire list of experiments listed in the paper can be found with the name of `run_experiment.sh`. It can also be used for general understanding of the experimentation setting.
+
+# Citation
+
+Please cite our work if you use the code.
+
+```
+@article{zahid2025e3dgs,
+  title={E-3DGS: Event-based Novel View Rendering of Large-scale Scenes Using 3D Gaussian Splatting},
+  author={Zahid, Sohaib and Rudnev, Viktor and Ilg, Eddy and Golyanik, Vladislav},
+  journal={3DV},
+  year={2025}
+}
+```
