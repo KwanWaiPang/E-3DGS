@@ -1,4 +1,4 @@
-name: splat
+name: E-3DGS
 channels:
   - pytorch
   - conda-forge

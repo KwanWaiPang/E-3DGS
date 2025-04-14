@@ -8,4 +8,14 @@ git clone https://github.com/KwanWaiPang/E-3DGS.git --recursive
 
 # rm -rf .git
 
+
+conda env create --yes --file environment.yml
+conda activate E-3DGS
+# conda remove --name E-3DGS --all
+
+conda install pytorch3d -c pytorch3d
+pip install submodules/diff-gaussian-rasterization
+pip install submodules/simple-knn
+pip install opencv-python pandas piq scipy numba tensorboard matplotlib lpips
+
 ```
